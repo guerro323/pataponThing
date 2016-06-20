@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Assets.Scripts;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -32,6 +33,20 @@ class Settings : MonoBehaviour
     void Start()
     {
         Reset("KeyInput");
+        DontDestroyOnLoad(gameObject);
+        ScriptFollower.GameManager = new GameManager();
+        ScriptFollower.AudioSource = Camera.main.GetComponent<AudioSource>();
+        var audios = ScriptFollower.AudioBank.Audios;
+        {
+            // ADD RYTHM SOUNDS
+            for (int i = 0; i < 3; i++)
+            {
+                audios.Add("Pata_" + i, Resources.Load("Sounds/Pata_" + i) as AudioClip);
+                audios.Add("Pon_" + i, Resources.Load("Sounds/Pon_" + i) as AudioClip);
+            }
+        }
+        ScriptFollower.AudioBank.Audios = audios;
+        ScriptFollower.AudioSource.PlayOneShot(audios["Pata_2"]);
     }
 
     void Awake()

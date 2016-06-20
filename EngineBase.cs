@@ -1,6 +1,11 @@
 ﻿using UnityEngine;
 using System.Collections;
+using System.Linq;
+using System;
 using System.Collections.Generic;
+using UnityEngine.UI;
+
+using CB = Assets.Scripts.Helper.Callbacks;
 
 /// <summary>
 /// Base Class for Player
@@ -31,8 +36,23 @@ public class EngineBase : MonoBehaviour
                 if (Key == Settings.singleton.KeyInput.Pon) return "Pon";
                 if (Key == Settings.singleton.KeyInput.Chaka) return "Chaka";
                 if (Key == Settings.singleton.KeyInput.Don) return "Don";
-                return "nothing";
+                return "Nothing";
             }
+        }
+
+        public static string GetString(int key)
+        {
+            var input = new PataponInput();
+            if (key == 1)
+                input.Key = Settings.singleton.KeyInput.Pata;
+            if (key == 2)
+                input.Key = Settings.singleton.KeyInput.Pon;
+            if (key == 3)
+                input.Key = Settings.singleton.KeyInput.Chaka;
+            if (key == 4)
+                input.Key = Settings.singleton.KeyInput.Don;
+
+            return input.KeyString;
         }
     }
 
@@ -40,13 +60,16 @@ public class EngineBase : MonoBehaviour
     /// List of the current rythm
     /// The last key will be the last input triggered
     /// </summary>
-    public SortedList<int ,PataponInput> CurrentRythms = new SortedList<int ,PataponInput>();
+    public Dictionary<int, PataponInput> CurrentRythms = new Dictionary<int, PataponInput>();
+    public RythmCommandManager CommandManager = new RythmCommandManager();
+
+    public Image test;
 
     /// <summary>
     /// The precision of an input
-    /// max per tap : 3 seconds
     /// </summary>
     public float SyncKeyTime;
+    private float _key;
 
     // Use this for initialization
     void Start()
@@ -59,46 +82,93 @@ public class EngineBase : MonoBehaviour
     {
         if (Input.GetKeyDown(Settings.singleton.KeyInput.Pata))
         {
+            CurrentRythms[CurrentRythms.Count] = new PataponInput { TimeStamp = Time.time, Key = Settings.singleton.KeyInput.Pata };
             OnKeyCommand(Time.time);
-            CurrentRythms.Add(CurrentRythms.Count + 1, new PataponInput { TimeStamp = Time.time, Key = Settings.singleton.KeyInput.Pata });
         }
         if (Input.GetKeyDown(Settings.singleton.KeyInput.Pon))
         {
+            CurrentRythms[CurrentRythms.Count] = new PataponInput { TimeStamp = Time.time, Key = Settings.singleton.KeyInput.Pon };
             OnKeyCommand(Time.time);
-            CurrentRythms.Add(CurrentRythms.Count + 1, new PataponInput { TimeStamp = Time.time, Key = Settings.singleton.KeyInput.Pon });
         }
         if (Input.GetKeyDown(Settings.singleton.KeyInput.Chaka))
         {
+            CurrentRythms[CurrentRythms.Count] = new PataponInput { TimeStamp = Time.time, Key = Settings.singleton.KeyInput.Chaka };
             OnKeyCommand(Time.time);
-            CurrentRythms.Add(CurrentRythms.Count + 1, new PataponInput { TimeStamp = Time.time, Key = Settings.singleton.KeyInput.Chaka });
         }
         if (Input.GetKeyDown(Settings.singleton.KeyInput.Don))
         {
+            CurrentRythms[CurrentRythms.Count] = new PataponInput { TimeStamp = Time.time, Key = Settings.singleton.KeyInput.Don };
             OnKeyCommand(Time.time);
-            CurrentRythms.Add(CurrentRythms.Count + 1, new PataponInput { TimeStamp = Time.time, Key = Settings.singleton.KeyInput.Don });
         }
 
         // Manage Time Precision
-        SyncKeyTime += Time.deltaTime;
-        if (SyncKeyTime >= 0.51F)
+        SyncKeyTime = (Environment.TickCount - _key) / 1000;
+        if (Environment.TickCount - _key >= 500)
         {
-            SyncKeyTime = 0F;
+            _key = Environment.TickCount;
         }
+
+        /*print(string.Concat(
+            CurrentRythms.ContainsKey(0) ? CurrentRythms[0].KeyString : "Nothing",
+            CurrentRythms.ContainsKey(1) ? CurrentRythms[1].KeyString : "Nothing",
+            CurrentRythms.ContainsKey(2) ? CurrentRythms[2].KeyString : "Nothing",
+            CurrentRythms.ContainsKey(3) ? CurrentRythms[3].KeyString : "Nothing"));*/
+
+
+        var newcolor = test.color;
+        newcolor.a = SyncKeyTime / 0.5F;
+        test.color = newcolor;
     }
 
     public void OnKeyCommand(float time)
     {
-        if (SyncKeyTime > 0.0 && 0.325 >= SyncKeyTime)
+        var rank = 0;
+        var key = CurrentRythms.Last();
+        if (SyncKeyTime >= 0.0 && 0.225 >= SyncKeyTime)
         {
-            print("noob");
+            // Score bof
+            rank = 0;
         }
-        else if (SyncKeyTime > 0.325 && 0.420 >= SyncKeyTime)
+        else if (SyncKeyTime > 0.225 && 0.320 >= SyncKeyTime)
         {
-            print("mm k");
+            // Bon score
+            rank = 1;
         }
-        else if (SyncKeyTime > 0.420 && 0.501 > SyncKeyTime)
+        else if (SyncKeyTime > 0.320 && 0.500 >= SyncKeyTime)
         {
-            print("DAMN IT'S NICE");
+            // Très bon score
+            rank = 2;
+        }
+        //print(key.Value.KeyString + "_" + rank);
+        ScriptFollower.GetMainPlayer().AudioSource.PlayOneShot(ScriptFollower.AudioBank.Audios[key.Value.KeyString + "_" + rank]);
+
+        VerifyCommand();
+
+        if (CurrentRythms.Count >= 4)
+        {
+            CurrentRythms.Remove(0);
+            CurrentRythms = CurrentRythms.OrderBy(t => t.Value.TimeStamp).ToDictionary(o => o.Key - 1, o => o.Value);
+        }
+    }
+
+    public void VerifyCommand()
+    {
+        var match = CommandManager.Verify(CurrentRythms);
+        //print(match.Exist + "<");
+        if (match.Exist)
+        {
+            //print(match.FoundString);
+            var concated = string.Concat(
+            match.FoundString[0],
+            match.FoundString[1],
+            match.FoundString[2],
+            match.FoundString[3]);
+
+            ScriptFollower.GameManager.OnEvent(CB.VerifyCommand.Success, new object[2] { ScriptFollower.GetMainPlayer(), match.FoundString });
+            foreach (var localPlayer in ScriptFollower.LocalEntities.Where(localPlayer => localPlayer.Type == Entity.EntityType.Player))
+            {
+                localPlayer.OnEvent(CB.VerifyCommand.Success, new object[2] { concated, CurrentRythms });
+            }
         }
     }
 }
